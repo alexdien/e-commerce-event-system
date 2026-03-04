@@ -526,7 +526,7 @@ docker compose up --build
 # In another terminal, test the full pipeline
 curl -X POST http://localhost:8001/orders \
   -H "Content-Type: application/json" \
-  -d '{"product_id":"WIDGET-001","quantity":3,"customer_email":"alice@example.com"}'
+  -d '{"product_id":"TAYLORMADE","quantity":3,"customer_email":"alice@example.com"}'
 
 # Watch the docker compose terminal — you'll see:
 #   orders        | → Published order.created: ...
@@ -537,7 +537,7 @@ curl -X POST http://localhost:8001/orders \
 # Test the failure path
 curl -X POST http://localhost:8001/orders \
   -H "Content-Type: application/json" \
-  -d '{"product_id":"GADGET-001","quantity":1,"customer_email":"bob@example.com"}'
+  -d '{"product_id":"PING","quantity":1,"customer_email":"bob@example.com"}'
 
 # Check the endpoints
 curl http://localhost:8002/stock
@@ -819,7 +819,7 @@ MINIKUBE_IP=$(minikube ip)
 # Place an order
 curl -X POST http://$MINIKUBE_IP:30001/orders \
   -H "Content-Type: application/json" \
-  -d '{"product_id":"WIDGET-002","quantity":5,"customer_email":"carol@example.com"}'
+  -d '{"product_id":"CALLAWAY","quantity":5,"customer_email":"carol@example.com"}'
 
 # Check stock
 curl http://$MINIKUBE_IP:30002/stock
