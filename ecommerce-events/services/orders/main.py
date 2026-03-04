@@ -8,7 +8,7 @@ from aiokafka import AIOKafkaProducer
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:90902")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:29092")
 
 producer: AIOKafkaProducer | None = None
 

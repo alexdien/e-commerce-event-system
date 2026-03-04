@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from fastapi import FastAPI
 
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:29092")
 
 # fake inventory
 stock = {
@@ -16,7 +16,7 @@ stock = {
 }
 
 consumer: AIOKafkaConsumer | None = None
-producer: AIOKafkaConsumer | None = None
+producer: AIOKafkaProducer | None = None
 
 async def consume_orders():
     """Background task that listens for orders.created.events"""
@@ -65,9 +65,9 @@ async def lifespan(app: FastAPI):
                 group_id="inventory.group",
                 value_deserializer=lambda v: json.loads(v.decode())
             )
-            producer = AIOKafkaConsumer(
+            producer = AIOKafkaProducer(
                 bootstrap_servers=KAFKA_BOOTSTRAP,
-                value_deserializer=lambda v: json.dumps(v).encode()
+                value_serializer=lambda v: json.dumps(v).encode()
             )
             await consumer.start()
             await producer.start()

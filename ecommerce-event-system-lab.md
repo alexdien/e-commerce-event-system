@@ -47,7 +47,6 @@ ecommerce-events/
 ├── k8s/
 │   ├── namespace.yml
 │   ├── kafka.yml
-│   ├── zookeeper.yml
 │   ├── orders.yml
 │   ├── inventory.yml
 │   └── notifications.yml
@@ -398,33 +397,34 @@ async def get_notifications():
 Before containerizing, you can spin up Kafka locally with Docker and run each service in a separate VS Code terminal:
 
 ```bash
-# Terminal 1 — start Kafka (single-node via docker)
+# Terminal 1 — start Kafka in KRaft mode (no ZooKeeper needed)
 docker run -d --name kafka-local \
   -p 9092:9092 \
-  -e KAFKA_CFG_NODE_ID=0 \
-  -e KAFKA_CFG_PROCESS_ROLES=controller,broker \
-  -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
-  -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
-  -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@localhost:9093 \
-  -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER \
-  -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
-  bitnami/kafka:3.7
+  -e KAFKA_NODE_ID=0 \
+  -e KAFKA_PROCESS_ROLES=broker,controller \
+  -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+  -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
+  -e KAFKA_CONTROLLER_QUORUM_VOTERS=0@localhost:9093 \
+  -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+  -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+  -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk \
+  apache/kafka:3.9.0
 
 # Terminal 2
-cd services/orders && pip install -r requirements.txt && uvicorn main:app --port 8001
+cd services/orders && pip3 install -r requirements.txt && python3 -m uvicorn main:app --port 8001
 
 # Terminal 3
-cd services/inventory && pip install -r requirements.txt && uvicorn main:app --port 8002
+cd services/inventory && pip3 install -r requirements.txt && python3 -m uvicorn main:app --port 8002
 
 # Terminal 4
-cd services/notifications && pip install -r requirements.txt && uvicorn main:app --port 8003
+cd services/notifications && pip3 install -r requirements.txt && python3 -m uvicorn main:app --port 8003
 ```
 
 ```bash
 # Test it
 curl -X POST http://localhost:8001/orders \
   -H "Content-Type: application/json" \
-  -d '{"product_id":"WIDGET-001","quantity":2,"customer_email":"test@example.com"}'
+  -d '{"product_id":"TAYLORMADE","quantity":2,"customer_email":"test@example.com"}'
 
 # Check notifications
 curl http://localhost:8003/notifications
@@ -464,32 +464,27 @@ Copy this file into `services/inventory/Dockerfile` and `services/notifications/
 
 ### 2.2 Docker Compose
 
-This file wires Kafka, Zookeeper, and all three services together on a shared Docker network.
+This file wires Kafka and all three services together on a shared Docker network. Kafka runs in KRaft mode (no ZooKeeper needed).
 
 **`docker-compose.yml`**
 ```yaml
 version: "3.9"
 
 services:
-  # ── Kafka Infrastructure ──────────────────────────────────────
-  zookeeper:
-    image: bitnami/zookeeper:3.9
-    environment:
-      ALLOW_ANONYMOUS_LOGIN: "yes"
-    ports:
-      - "2181:2181"
-
+  # ── Kafka Infrastructure (KRaft mode — no ZooKeeper needed) ──
   kafka:
-    image: bitnami/kafka:3.7
-    depends_on:
-      - zookeeper
+    image: apache/kafka:3.9.0
     ports:
       - "9092:9092"
     environment:
-      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NODE_ID: 0
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 0@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
 
   # ── Application Services ──────────────────────────────────────
   orders:
@@ -593,45 +588,6 @@ metadata:
   name: ecommerce
 ```
 
-**`k8s/zookeeper.yml`**
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: zookeeper
-  namespace: ecommerce
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: zookeeper
-  template:
-    metadata:
-      labels:
-        app: zookeeper
-    spec:
-      containers:
-        - name: zookeeper
-          image: bitnami/zookeeper:3.9
-          ports:
-            - containerPort: 2181
-          env:
-            - name: ALLOW_ANONYMOUS_LOGIN
-              value: "yes"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: zookeeper
-  namespace: ecommerce
-spec:
-  selector:
-    app: zookeeper
-  ports:
-    - port: 2181
-      targetPort: 2181
-```
-
 **`k8s/kafka.yml`**
 ```yaml
 apiVersion: apps/v1
@@ -651,18 +607,26 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: bitnami/kafka:3.7
+          image: apache/kafka:3.9.0
           ports:
             - containerPort: 9092
           env:
-            - name: KAFKA_CFG_ZOOKEEPER_CONNECT
-              value: "zookeeper:2181"
-            - name: KAFKA_CFG_LISTENERS
-              value: "PLAINTEXT://:9092"
-            - name: KAFKA_CFG_ADVERTISED_LISTENERS
+            - name: KAFKA_NODE_ID
+              value: "0"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
               value: "PLAINTEXT://kafka:9092"
-            - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
-              value: "true"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "0@localhost:9093"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+            - name: CLUSTER_ID
+              value: "MkU3OEVBNTcwNTJENDM2Qk"
 ---
 apiVersion: v1
 kind: Service
@@ -832,12 +796,11 @@ spec:
 ```bash
 # Apply everything in order
 kubectl apply -f k8s/namespace.yml
-kubectl apply -f k8s/zookeeper.yml
 kubectl apply -f k8s/kafka.yml
 
 # Wait for Kafka to be ready
 kubectl -n ecommerce get pods -w
-# (wait until kafka and zookeeper pods show 1/1 Running)
+# (wait until the kafka pod shows 1/1 Running)
 
 kubectl apply -f k8s/orders.yml
 kubectl apply -f k8s/inventory.yml

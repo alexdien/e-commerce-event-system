@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from aiokafka import AIOKafkaConsumer
 from fastapi import FastAPI
 
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:29092")
 
 #  In-memory notification log (for the GET endpoint)
 notifications: list[dict] = []
